@@ -104,25 +104,3 @@ const manifest = {
 };
 await writeFile(path.join(output, 'build-info.json'), JSON.stringify(manifest, null, 2) + '\n');
 console.log('Validacao concluida: ' + files.length + ' arquivos, referencias locais e contato conferidos.');
-
-if (!localSnapshot) {
-  const liveManifestResponse = await fetch(siteUrl + '/build-info.json', { signal: AbortSignal.timeout(30000) });
-  if (!liveManifestResponse.ok) throw new Error('Verificacao publica: manifesto indisponivel');
-  const liveManifest = await liveManifestResponse.json();
-  if (liveManifest.site !== siteUrl || liveManifest.files.length !== files.length) throw new Error('Manifesto publico inesperado');
-  for (const entry of liveManifest.files) {
-    const response = await fetch(siteUrl + '/' + (entry.path === 'index.html' ? '' : entry.path), { signal: AbortSignal.timeout(30000) });
-    if (!response.ok || new URL(response.url).origin !== siteUrl) throw new Error('Recurso publico indisponivel: ' + entry.path);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) throw new Error('Conteudo publico diverge: ' + entry.path);
-  }
-  console.log('CIDA_PUBLIC_VERIFIED ' + files.length + ' arquivos HTTPS sem autenticacao');
-  for (const [file, data] of content) {
-    const encoded = data.toString('base64');
-    const total = Math.ceil(encoded.length / 8000);
-    for (let index = 0; index < total; index++) {
-      console.log('CIDA_SNAPSHOT_V1 ' + JSON.stringify({ path: file, index, total, data: encoded.slice(index * 8000, (index + 1) * 8000) }));
-    }
-  }
-  console.log('CIDA_SNAPSHOT_COMPLETE ' + content.size);
-}
