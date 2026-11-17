@@ -18,9 +18,3 @@ document.querySelectorAll('[data-image]').forEach(button=>button.addEventListene
  const img=document.querySelector('#gallery-image');img.src=button.dataset.image;img.alt=button.querySelector('img').alt;
  document.querySelector('#gallery-caption').textContent=button.dataset.caption;openDialog(gallery);
 }));
-const copyButton=document.querySelector('#copy-email');
-copyButton.addEventListener('click',async()=>{
- const status=document.querySelector('#copy-status');
- try{await navigator.clipboard.writeText('robsonmotta@retirodosartistas.org');status.textContent='E-mail copiado. Pronto para colar.';copyButton.textContent='Copiado ✓';setTimeout(()=>{copyButton.textContent='Copiar e-mail';},3000);}
- catch{status.textContent='Selecione o endereço acima para copiar, ou clique nele para escrever.';}
-});

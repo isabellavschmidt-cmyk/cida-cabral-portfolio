@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -6,11 +6,12 @@ import { spawnSync } from 'node:child_process';
 const source='robson/site', output='robson/dist';
 const siteUrl=(process.env.RENDER_EXTERNAL_URL||process.env.SITE_URL||'').replace(/\/$/,'');
 if(!siteUrl||new URL(siteUrl).protocol!=='https:')throw new Error('Endereco HTTPS de publicacao ausente');
+await rm(output,{recursive:true,force:true});
 await mkdir(path.join(output,'assets'),{recursive:true});
 const photographs=[
  ['assets/robson-retrato.jpg','https://retirodosartistas.org.br/wp-content/uploads/2025/12/IMG_1698-683x1024.jpg'],
- ['assets/retiro-01.jpg','https://retirodosartistas.org.br/wp-content/uploads/2023/11/3-1.jpg'],
- ['assets/retiro-02.jpg','https://retirodosartistas.org.br/wp-content/uploads/2023/11/8.jpg']
+ ['assets/retiro-celebracao-2026.jpg','https://revistamanchete.com.br/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-18-at-22.45.41-759x400.jpeg'],
+ ['assets/retiro-encontro-2026.jpg','https://revistamanchete.com.br/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-18-at-22.45.42-225x300.jpeg']
 ];
 async function get(url){
  for(let attempt=0;attempt<3;attempt++){
@@ -23,11 +24,51 @@ async function get(url){
   }catch(error){if(attempt===2)throw new Error(new URL(url).hostname+': '+error.message);await new Promise(r=>setTimeout(r,1000));}
  }
 }
+const photoArticle='https://revistamanchete.com.br/blog/2026/09/19/o-retiro-dos-artistas-comemora-108-anos-em-grande-estilo/';
+let photoMarkup='';
+try{photoMarkup=(await get(photoArticle)).toString('utf8').replaceAll('\\/','/');}
+catch{console.log('Usando as imagens de divulgacao vinculadas na reportagem.');}
+function photoCandidates(fallback){
+ if(!fallback.includes('revistamanchete.com.br'))return [fallback];
+ const stem=fallback.replace(/-\d+x\d+(?=\.jpeg$)/,'');
+ const prefix=stem.slice(0,-5);
+ const urls=[...photoMarkup.matchAll(/https:\/\/revistamanchete\.com\.br\/wp-content\/uploads\/2026\/09\/[^"'<> \t\r\n,]+\.jpeg/g)].map(match=>match[0]);
+ const relevant=urls.filter(url=>url===stem||(url.startsWith(prefix+'-')&&/^-\d+x\d+\.jpeg$/.test(url.slice(prefix.length))));
+ const candidates=[...new Set([...relevant,fallback])];
+ const size=url=>url===stem?1000000:Number(url.match(/-(\d+)x\d+\.jpeg$/)?.[1]||0);
+ return candidates.sort((a,b)=>size(b)-size(a));
+}
+function jpegSize(bytes){
+ let offset=2;
+ while(offset+9<bytes.length){
+  if(bytes[offset]!==255){offset++;continue;}
+  const marker=bytes[offset+1];
+  if([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)){
+   return {width:bytes.readUInt16BE(offset+7),height:bytes.readUInt16BE(offset+5)};
+  }
+  if(marker===0xda||marker===0xd9)break;
+  const length=bytes.readUInt16BE(offset+2);
+  if(length<2)break;
+  offset+=2+length;
+ }
+ throw new Error('Dimensoes JPEG indisponiveis');
+}
+const photoDimensions=new Map();
 for(const [file,url] of photographs){
- const bytes=await get(url);
- if(bytes.subarray(0,3).toString('hex')!=='ffd8ff')throw new Error('Fotografia invalida: '+file);
+ let bytes,selected;
+ for(const candidate of photoCandidates(url)){
+  try{
+   const fetched=await get(candidate);
+   if(fetched.subarray(0,3).toString('hex')!=='ffd8ff')throw new Error('Resposta nao e JPEG');
+   jpegSize(fetched);
+   bytes=fetched;selected=candidate;break;
+  }catch(error){console.log('Fonte de imagem indisponivel: '+new URL(candidate).pathname);}
+ }
+ if(!bytes)throw new Error('Fotografia indisponivel: '+file);
+ const dimensions=jpegSize(bytes);
+ photoDimensions.set(file,dimensions);
  await writeFile(path.join(output,file),bytes);
- console.log('Imagem verificada: '+file+' ('+bytes.length+' bytes)');
+ console.log('Imagem verificada: '+file+' ('+bytes.length+' bytes, '+dimensions.width+'x'+dimensions.height+'); fonte: '+selected);
 }
 const fontUrl='https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap';
 let fonts=(await get(fontUrl)).toString('utf8');
@@ -45,11 +86,19 @@ for(let i=0;i<fontUrls.length;i++){
 await writeFile(path.join(output,'assets/fonts.css'),fonts);
 for(const file of ['index.html','style.css','app.js','assets/favicon.svg']){
  let text=await readFile(path.join(source,file),'utf8');
- if(file==='index.html')text=text.split('__SITE_URL__').join(siteUrl);
+ if(file==='index.html'){
+  text=text.split('__SITE_URL__').join(siteUrl);
+  text=text.replace(/<img\b[^>]*>/g,tag=>{
+   const source=tag.match(/\bsrc="([^"]+)"/)?.[1];
+   const dimensions=photoDimensions.get(source);
+   if(!dimensions)return tag;
+   return tag.replace(/\bwidth="\d+"/,'width="'+dimensions.width+'"').replace(/\bheight="\d+"/,'height="'+dimensions.height+'"');
+  });
+ }
  await writeFile(path.join(output,file),text);
 }
 const html=await readFile(path.join(output,'index.html'),'utf8');
-for(const marker of ['Robson Motta','robsonmotta@retirodosartistas.org','https://retirodosartistas.org.br/','https://globoplay.globo.com/v/934995/']){
+for(const marker of ['Robson Motta','https://www.instagram.com/robsonmotta.rj/','https://retirodosartistas.org.br/','https://globoplay.globo.com/v/934995/']){
  if(!html.includes(marker))throw new Error('Conteudo obrigatorio ausente: '+marker);
 }
 if(html.includes('__SITE_URL__')||html.includes('cidacabral')||html.includes('chatgpt.site'))throw new Error('Referencia incorreta na pagina');
@@ -77,7 +126,7 @@ async function inventory(dir=''){
  }
 }
 await inventory();
-await writeFile(path.join(output,'build-info.json'),JSON.stringify({site:siteUrl,commit:process.env.RENDER_GIT_COMMIT,builtAt:new Date().toISOString(),files:rows,contact:'robsonmotta@retirodosartistas.org'},null,2));
+await writeFile(path.join(output,'build-info.json'),JSON.stringify({site:siteUrl,commit:process.env.RENDER_GIT_COMMIT,builtAt:new Date().toISOString(),files:rows,contact:'https://www.instagram.com/robsonmotta.rj/'},null,2));
 await writeFile(path.join(output,'robots.txt'),'User-agent: *\nAllow: /\nSitemap: '+siteUrl+'/sitemap.xml\n');
 await writeFile(path.join(output,'sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'+siteUrl+'/</loc></url></urlset>');
 console.log('ROBSON_BUILD_OK '+rows.length+' arquivos; fotografias, fontes, navegacao e contato verificados.');
