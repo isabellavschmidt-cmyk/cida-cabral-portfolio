@@ -8,10 +8,12 @@ const siteUrl=(process.env.RENDER_EXTERNAL_URL||process.env.SITE_URL||'').replac
 if(!siteUrl||new URL(siteUrl).protocol!=='https:')throw new Error('Endereco HTTPS de publicacao ausente');
 await rm(output,{recursive:true,force:true});
 await mkdir(path.join(output,'assets'),{recursive:true});
+const suppliedPhotoUrl=process.env.ROBSON_RETIRO_PHOTO_URL;
+if(!suppliedPhotoUrl||new URL(suppliedPhotoUrl).protocol!=='https:')throw new Error('Configure ROBSON_RETIRO_PHOTO_URL com o endereco HTTPS da fotografia fornecida');
 const photographs=[
  ['assets/robson-retrato.jpg','https://retirodosartistas.org.br/wp-content/uploads/2025/12/IMG_1698-683x1024.jpg'],
  ['assets/retiro-celebracao-2026.jpg','https://revistamanchete.com.br/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-18-at-22.45.41-759x400.jpeg'],
- ['assets/retiro-encontro-2026.jpg','https://revistamanchete.com.br/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-18-at-22.45.42-225x300.jpeg']
+ ['assets/robson-no-retiro.png',suppliedPhotoUrl]
 ];
 async function get(url){
  for(let attempt=0;attempt<3;attempt++){
@@ -53,22 +55,31 @@ function jpegSize(bytes){
  }
  throw new Error('Dimensoes JPEG indisponiveis');
 }
+function imageSize(bytes){
+ if(bytes.length>=24&&bytes.subarray(0,8).toString('hex')==='89504e470d0a1a0a'&&bytes.toString('ascii',12,16)==='IHDR'){
+  const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);
+  if(!width||!height)throw new Error('Dimensoes PNG invalidas');
+  return {width,height};
+ }
+ if(bytes.subarray(0,3).toString('hex')==='ffd8ff')return jpegSize(bytes);
+ throw new Error('Arquivo nao e uma fotografia PNG ou JPEG valida');
+}
 const photoDimensions=new Map();
 for(const [file,url] of photographs){
  let bytes,selected;
  for(const candidate of photoCandidates(url)){
   try{
    const fetched=await get(candidate);
-   if(fetched.subarray(0,3).toString('hex')!=='ffd8ff')throw new Error('Resposta nao e JPEG');
-   jpegSize(fetched);
+   if(file.endsWith('.png')&&fetched.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw new Error('O download da fotografia deve ser PNG');
+   imageSize(fetched);
    bytes=fetched;selected=candidate;break;
   }catch(error){console.log('Fonte de imagem indisponivel: '+new URL(candidate).pathname);}
  }
  if(!bytes)throw new Error('Fotografia indisponivel: '+file);
- const dimensions=jpegSize(bytes);
+ const dimensions=imageSize(bytes);
  photoDimensions.set(file,dimensions);
  await writeFile(path.join(output,file),bytes);
- console.log('Imagem verificada: '+file+' ('+bytes.length+' bytes, '+dimensions.width+'x'+dimensions.height+'); fonte: '+selected);
+ console.log('Imagem verificada: '+file+' ('+bytes.length+' bytes, '+dimensions.width+'x'+dimensions.height+'); fonte: '+(file==='assets/robson-no-retiro.png'?'fotografia fornecida para o portfolio':selected));
 }
 const fontUrl='https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap';
 let fonts=(await get(fontUrl)).toString('utf8');
