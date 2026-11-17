@@ -81,3 +81,19 @@ await writeFile(path.join(output,'build-info.json'),JSON.stringify({site:siteUrl
 await writeFile(path.join(output,'robots.txt'),'User-agent: *\nAllow: /\nSitemap: '+siteUrl+'/sitemap.xml\n');
 await writeFile(path.join(output,'sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'+siteUrl+'/</loc></url></urlset>');
 console.log('ROBSON_BUILD_OK '+rows.length+' arquivos; fotografias, fontes, navegacao e contato verificados.');
+
+// Check the previously published version without blocking a repair deploy.
+async function verifyPublishedSite(){
+ const manifest=JSON.parse((await get(siteUrl+'/build-info.json')).toString('utf8'));
+ if(manifest.site!==siteUrl||!Array.isArray(manifest.files)||manifest.files.length>80)throw new Error('Manifesto publicado invalido');
+ for(const file of manifest.files){
+  if(!/^[a-zA-Z0-9_./-]+$/.test(file.path)||file.path.includes('..')||file.path.startsWith('/')||!/^[a-f0-9]{64}$/.test(file.sha256))throw new Error('Referencia de arquivo invalida');
+  const bytes=await get(siteUrl+'/'+file.path);
+  if(bytes.length!==file.bytes||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw new Error('Arquivo publicado divergente: '+file.path);
+ }
+ const home=await get(siteUrl+'/');
+ const expected=manifest.files.find(file=>file.path==='index.html');
+ if(!expected||createHash('sha256').update(home).digest('hex')!==expected.sha256)throw new Error('Pagina inicial publicada divergente');
+ console.log('ROBSON_LIVE_OK '+manifest.files.length+' arquivos publicados conferidos por HTTPS; pagina inicial, imagens, fontes, CSS e JavaScript.');
+}
+try{await verifyPublishedSite();}catch(error){console.log('ROBSON_LIVE_CHECK_UNAVAILABLE '+error.message);}
