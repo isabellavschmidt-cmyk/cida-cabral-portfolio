@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rm, cp } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -95,9 +95,41 @@ for(let i=0;i<fontUrls.length;i++){
  fonts=fonts.split(url).join(name);
 }
 await writeFile(path.join(output,'assets/fonts.css'),fonts);
-for(const file of ['index.html','style.css','app.js','assets/favicon.svg']){
+
+// Publish the exact PDF supplied for public reading and download.
+const bookFile='livros/a-procura-de-uma-familia.pdf';
+const book=await readFile(path.join(source,bookFile));
+const bookSha='caff963f222caca4c6d0be1816504c3f125103593535000d35f29c5e53cc6ea9';
+if(book.length!==11210739||createHash('sha256').update(book).digest('hex')!==bookSha)throw new Error('PDF original divergente');
+await mkdir(path.join(output,'livros'),{recursive:true});
+await writeFile(path.join(output,bookFile),book);
+await cp(path.join(source,'assets/livro-capa.webp'),path.join(output,'assets/livro-capa.webp'));
+
+// Pin and verify the official PDF.js package; serve the reader locally.
+const pdfjsVersion='6.5.438';
+const pdfjsIntegrity='vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqnOXoxw3HG907WHOg1JYOvLhP756boddFxpA==';
+const packageBytes=await get('https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-'+pdfjsVersion+'.tgz');
+if(createHash('sha512').update(packageBytes).digest('base64')!==pdfjsIntegrity)throw new Error('Integridade PDF.js divergente');
+const temporary=path.join(output,'.pdfjs-package');
+await mkdir(temporary,{recursive:true});
+await writeFile(path.join(temporary,'package.tgz'),packageBytes);
+const extracted=spawnSync('tar',['-xzf',path.join(temporary,'package.tgz'),'-C',temporary,'package/legacy/build/pdf.min.mjs','package/legacy/build/pdf.worker.min.mjs','package/web/pdf_viewer.css','package/wasm','package/standard_fonts','package/LICENSE'],{encoding:'utf8'});
+if(extracted.status!==0)throw new Error(extracted.stderr||'Falha ao preparar PDF.js');
+const vendor=path.join(output,'assets/pdfjs');
+await mkdir(vendor,{recursive:true});
+for(const name of ['pdf.min.mjs','pdf.worker.min.mjs'])await cp(path.join(temporary,'package/legacy/build',name),path.join(vendor,name));
+for(const name of ['wasm','standard_fonts','LICENSE'])await cp(path.join(temporary,'package',name),path.join(vendor,name),{recursive:true});
+const viewerCss=await readFile(path.join(temporary,'package/web/pdf_viewer.css'),'utf8');
+const textStart=viewerCss.indexOf('\n.textLayer {');
+const textEnd=viewerCss.indexOf('\n.textLayerImages {',textStart);
+if(textStart<0||textEnd<0)throw new Error('CSS de selecao de texto PDF.js ausente');
+const textCss=viewerCss.slice(0,viewerCss.indexOf('*/')+2)+'\n/* Text selection styles from the pinned PDF.js distribution. */\n'+viewerCss.slice(textStart,textEnd);
+await writeFile(path.join(vendor,'pdf_viewer.css'),textCss);
+await rm(temporary,{recursive:true,force:true});
+
+for(const file of ['index.html','livro.html','style.css','livro.css','app.js','livro.js','assets/favicon.svg']){
  let text=await readFile(path.join(source,file),'utf8');
- if(file==='index.html'){
+ if(file.endsWith('.html')){
   text=text.split('__SITE_URL__').join(siteUrl);
   text=text.replace(/<img\b[^>]*>/g,tag=>{
    const source=tag.match(/\bsrc="([^"]+)"/)?.[1];
@@ -113,21 +145,30 @@ for(const marker of ['Robson Motta','https://www.instagram.com/robsonmotta.rj/',
  if(!html.includes(marker))throw new Error('Conteudo obrigatorio ausente: '+marker);
 }
 if(html.includes('__SITE_URL__')||html.includes('cidacabral')||html.includes('chatgpt.site'))throw new Error('Referencia incorreta na pagina');
-const ids=[...html.matchAll(/\bid=["']([^"']+)["']/g)].map(x=>x[1]);
-if(new Set(ids).size!==ids.length)throw new Error('Identificador HTML duplicado');
-async function validateReference(ref,parent){
+async function validateReference(ref,parent,ids=[]){
  if(ref.startsWith('#')){if(!ids.includes(ref.slice(1)))throw new Error('Ancora inexistente: '+ref);return;}
  if(/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(ref))return;
- const local=decodeURIComponent(new URL(ref,'https://local.invalid/'+parent).pathname).replace(/^\//,'');
- if(local)await readFile(path.join(output,local));
+ const url=new URL(ref,'https://local.invalid/'+parent);
+ let local=decodeURIComponent(url.pathname).replace(/^\//,'');
+ if(!local||local.endsWith('/'))local+='index.html';
+ const target=await readFile(path.join(output,local));
+ if(url.hash&&!target.toString('utf8').includes('id="'+url.hash.slice(1)+'"'))throw new Error('Ancora de destino inexistente: '+ref);
 }
-for(const x of html.matchAll(/(?:src|href|data-image)=["']([^"']+)["']/g))await validateReference(x[1],'index.html');
-for(const file of ['style.css','assets/fonts.css']){
+for(const file of ['index.html','livro.html']){
+ const markup=await readFile(path.join(output,file),'utf8');
+ if(markup.includes('__SITE_URL__'))throw new Error('Endereco incompleto: '+file);
+ const ids=[...markup.matchAll(/\bid=["']([^"']+)["']/g)].map(x=>x[1]);
+ if(new Set(ids).size!==ids.length)throw new Error('Identificador HTML duplicado: '+file);
+ for(const x of markup.matchAll(/(?:src|href|data-image)=["']([^"']+)["']/g))await validateReference(x[1],file,ids);
+}
+for(const file of ['style.css','livro.css','assets/fonts.css','assets/pdfjs/pdf_viewer.css']){
  const css=await readFile(path.join(output,file),'utf8');
  for(const x of css.matchAll(/url\(\s*["']?([^"')\s]+)["']?\s*\)/g))await validateReference(x[1],file);
 }
-const syntax=spawnSync(process.execPath,['--check',path.join(output,'app.js')],{encoding:'utf8'});
-if(syntax.status!==0)throw new Error(syntax.stderr||'JavaScript invalido');
+for(const script of ['app.js','livro.js']){
+ const syntax=spawnSync(process.execPath,['--check',path.join(output,script)],{encoding:'utf8'});
+ if(syntax.status!==0)throw new Error(syntax.stderr||'JavaScript invalido: '+script);
+}
 const rows=[];
 async function inventory(dir=''){
  for(const entry of await readdir(path.join(output,dir),{withFileTypes:true})){
@@ -139,21 +180,5 @@ async function inventory(dir=''){
 await inventory();
 await writeFile(path.join(output,'build-info.json'),JSON.stringify({site:siteUrl,commit:process.env.RENDER_GIT_COMMIT,builtAt:new Date().toISOString(),files:rows,contact:'https://www.instagram.com/robsonmotta.rj/'},null,2));
 await writeFile(path.join(output,'robots.txt'),'User-agent: *\nAllow: /\nSitemap: '+siteUrl+'/sitemap.xml\n');
-await writeFile(path.join(output,'sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'+siteUrl+'/</loc></url></urlset>');
-console.log('ROBSON_BUILD_OK '+rows.length+' arquivos; fotografias, fontes, navegacao e contato verificados.');
-
-// Check the previously published version without blocking a repair deploy.
-async function verifyPublishedSite(){
- const manifest=JSON.parse((await get(siteUrl+'/build-info.json')).toString('utf8'));
- if(manifest.site!==siteUrl||!Array.isArray(manifest.files)||manifest.files.length>80)throw new Error('Manifesto publicado invalido');
- for(const file of manifest.files){
-  if(!/^[a-zA-Z0-9_./-]+$/.test(file.path)||file.path.includes('..')||file.path.startsWith('/')||!/^[a-f0-9]{64}$/.test(file.sha256))throw new Error('Referencia de arquivo invalida');
-  const bytes=await get(siteUrl+'/'+file.path);
-  if(bytes.length!==file.bytes||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw new Error('Arquivo publicado divergente: '+file.path);
- }
- const home=await get(siteUrl+'/');
- const expected=manifest.files.find(file=>file.path==='index.html');
- if(!expected||createHash('sha256').update(home).digest('hex')!==expected.sha256)throw new Error('Pagina inicial publicada divergente');
- console.log('ROBSON_LIVE_OK '+manifest.files.length+' arquivos publicados conferidos por HTTPS; pagina inicial, imagens, fontes, CSS e JavaScript.');
-}
-try{await verifyPublishedSite();}catch(error){console.log('ROBSON_LIVE_CHECK_UNAVAILABLE '+error.message);}
+await writeFile(path.join(output,'sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'+siteUrl+'/</loc></url><url><loc>'+siteUrl+'/livro.html</loc></url></urlset>');
+console.log('ROBSON_BUILD_OK '+rows.length+' arquivos; fotografias, fontes, navegacao, leitor e PDF original verificados.');

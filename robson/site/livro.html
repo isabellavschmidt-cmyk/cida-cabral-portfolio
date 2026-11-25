@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#20221f">
+  <meta name="description" content="Leia À procura de uma família, de Robson Motta. A autobiografia completa, em sua segunda edição, disponível para leitura online e download em PDF.">
+  <meta property="og:title" content="À procura de uma família — Robson Motta">
+  <meta property="og:description" content="A história de Robson, em suas próprias palavras. Leia o livro completo ou baixe o PDF.">
+  <meta property="og:type" content="book">
+  <meta property="og:url" content="__SITE_URL__/livro.html">
+  <meta property="og:image" content="__SITE_URL__/assets/livro-capa.webp">
+  <link rel="canonical" href="__SITE_URL__/livro.html">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/fonts.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assets/pdfjs/pdf_viewer.css">
+  <link rel="stylesheet" href="livro.css">
+  <script type="module" src="livro.js"></script>
+  <title>À procura de uma família — Leia o livro de Robson Motta</title>
+</head>
+<body class="book-page">
+  <a class="skip" href="#leitor">Pular para a leitura</a>
+  <header class="header">
+    <div class="header-inner wrap">
+      <a class="brand" href="/" aria-label="Robson Motta, página inicial"><span class="brand-mark" aria-hidden="true">RM<span>•</span></span><span class="brand-name">ROBSON<br>MOTTA</span></a>
+      <nav class="book-navigation" aria-label="Navegação principal"><a href="/#livro">Voltar ao portfólio</a><a href="livro.html" aria-current="page">Livro</a></nav>
+    </div>
+  </header>
+  <main>
+    <section class="book-introduction wrap" aria-labelledby="book-title">
+      <img class="book-thumb" src="assets/livro-capa.webp" alt="Capa de À procura de uma família, de Robson Motta." width="840" height="1191">
+      <div class="book-introduction-copy"><p class="book-eyebrow">ROBSON MOTTA · AUTOBIOGRAFIA</p><h1 id="book-title">À procura de uma família</h1><p>Uma vida contada por quem a viveu.</p><p class="book-edition">2ª edição · Rubi Editorial · 2025</p></div>
+      <a class="button button-acid book-download" href="livros/a-procura-de-uma-familia.pdf" download="A-procura-de-uma-familia-Robson-Motta.pdf">Baixar livro em PDF <small>Arquivo completo · 11,2 MB</small></a>
+    </section>
+    <section class="reading-section" id="leitor" aria-labelledby="reader-title">
+      <div class="reader-shell">
+        <div class="reader-heading"><h2 id="reader-title">Leia online</h2><a href="livros/a-procura-de-uma-familia.pdf" target="_blank" rel="noopener">Abrir PDF em outra aba</a></div>
+        <p class="reader-instructions">Use os controles para navegar pelo livro. Você também pode escolher um capítulo no sumário.</p>
+        <div class="reader-toolbar" aria-label="Controles de leitura">
+          <form id="page-form" class="page-navigation" aria-label="Navegação de páginas">
+            <button id="previous-page" type="button" disabled>Anterior</button>
+            <div class="page-counter"><label for="page-number">Página</label><input id="page-number" type="number" min="1" max="51" value="1" inputmode="numeric" aria-describedby="page-total" disabled><span id="page-total">de 51</span></div>
+            <button id="next-page" type="button" disabled>Próxima</button>
+          </form>
+          <div class="reader-tools">
+            <label class="chapter-control" for="chapter-select"><span>Sumário</span><select id="chapter-select" disabled><option value="1">Capa</option><option value="3">Sumário do livro</option><option value="4">Depoimentos</option><option value="8">Capítulo I</option><option value="10">Capítulo II</option><option value="14">Capítulo III</option><option value="19">Capítulo IV</option><option value="22">Capítulo V</option><option value="31">Capítulo VI</option><option value="35">Capítulo VII</option><option value="39">Capítulo VIII</option><option value="44">Agradecimentos</option><option value="45">Fotografias</option></select></label>
+            <div class="zoom-controls" aria-label="Tamanho da página"><button id="zoom-out" type="button" aria-label="Diminuir página" disabled>−</button><output id="zoom-level" aria-label="Zoom">100%</output><button id="zoom-in" type="button" aria-label="Ampliar página" disabled>+</button><button id="fit-page" type="button" disabled>Ajustar</button></div>
+          </div>
+        </div>
+        <p id="reader-status" class="reader-status" role="status" aria-live="polite">Preparando o livro para leitura…</p>
+        <div id="reader-error" class="reader-error" hidden><p>Não foi possível abrir o leitor neste navegador. O livro continua disponível no link abaixo.</p><a href="livros/a-procura-de-uma-familia.pdf" class="button button-dark">Abrir o livro em PDF</a><button id="retry-reader" type="button">Tentar novamente</button></div>
+        <noscript><p class="reader-error">Ative o JavaScript para usar o leitor ou <a href="livros/a-procura-de-uma-familia.pdf">abra o livro completo em PDF</a>.</p></noscript>
+        <div id="page-stage" class="page-stage" aria-busy="true" tabindex="0" aria-label="Página do livro. Use as teclas de seta para navegar.">
+          <div id="pdf-page" class="pdf-page"><canvas id="pdf-canvas" aria-hidden="true"></canvas><div id="text-layer" class="textLayer"></div></div>
+        </div>
+        <div class="reading-bottom"><span id="reading-progress">51 páginas · Livro completo</span><a href="livros/a-procura-de-uma-familia.pdf" download="A-procura-de-uma-familia-Robson-Motta.pdf">Baixar PDF</a></div>
+        <details class="page-transcript"><summary>Texto da página</summary><div id="page-text" class="page-text">O texto será exibido quando a página carregar.</div></details>
+      </div>
+    </section>
+    <section class="book-afterword wrap"><h2>A história continua<br>nos encontros.</h2><div><p>Conheça o trabalho de Robson no Retiro dos Artistas e sua trajetória na produção cultural e social.</p><a class="button button-dark" href="/">Voltar ao portfólio</a></div></section>
+  </main>
+  <footer class="book-footer wrap"><p>© 2025 Robson Motta · Rubi Editorial</p><p>Leitura integral da edição em PDF.</p><a href="https://www.instagram.com/robsonmotta.rj/" target="_blank" rel="noopener noreferrer">@robsonmotta.rj</a></footer>
+</body>
+</html>
